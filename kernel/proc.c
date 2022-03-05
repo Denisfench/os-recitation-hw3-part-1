@@ -44,6 +44,10 @@ void pinit(void) { initlock(&ptable.lock, "ptable"); }
 // If found, change state to EMBRYO and initialize
 // state required to run in the kernel.
 // Otherwise return 0.
+
+// ** allocproc() allocates a process structure
+// [x x x x x x ... x x x x]
+// [    |]
 static struct proc *allocproc(void) {
   struct proc *p;
   char *sp;
@@ -58,6 +62,7 @@ static struct proc *allocproc(void) {
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+  // perhaps a good place to initialize stuff
   release(&ptable.lock);
 
   // Allocate kernel stack.
@@ -91,6 +96,7 @@ void userinit(void) {
   extern char _binary_user_initcode_start[], _binary_user_initcode_size[];
 
   p = allocproc();
+
   initproc = p;
   if ((p->pgdir = setupkvm()) == 0)
     panic("userinit: out of memory?");
@@ -174,6 +180,7 @@ int fork(void) {
 // Exit the current process.  Does not return.
 // An exited process remains in the zombie state
 // until its parent calls wait() to find out it exited.
+// ** the process exits or terminates here
 void exit(void) {
   struct proc *p;
   int fd;
@@ -216,6 +223,7 @@ void exit(void) {
 
 // Wait for a child process to exit and return its pid.
 // Return -1 if this process has no children.
+// that's an interesting function to look into...
 int wait(void) {
   struct proc *p;
   int havekids, pid;
@@ -224,10 +232,14 @@ int wait(void) {
   for (;;) {
     // Scan through table looking for zombie children.
     havekids = 0;
+    // [x x x x x x x x x x x x x x x]
+    //  |
     for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
       if (p->parent != proc)
         continue;
       havekids = 1;
+      // we've found a zombie child here and are deallocating its resources
+      // perhaps it's time to record some stuff...
       if (p->state == ZOMBIE) {
         // Found one.
         pid = p->pid;
@@ -236,9 +248,14 @@ int wait(void) {
         freevm(p->pgdir);
         p->state = UNUSED;
         p->pid = 0;
+//        *ctime = p->creation_time;
+//        p->creation_time = 0;
+        //1. get creation time
+        // 2. set creation time to 0
         p->parent = 0;
         p->name[0] = 0;
         p->killed = 0;
+        // I think we've added some extra fields...
         release(&ptable.lock);
         return pid;
       }
@@ -255,6 +272,22 @@ int wait(void) {
   }
 }
 
+
+// incement the fileds by 1
+void updateTicks(void) {
+  // update proc structure counters based on the process' state for each process
+  // loop over the process structure
+  // check the state of each process
+
+}
+
+int get_total_tickets(void) {
+  // find RUNNABLE processes
+  // assign a random ticket to each process
+  // calculate ti=he total number of tickets
+  return total_tickets;
+}
+
 // PAGEBREAK: 42
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
@@ -263,6 +296,7 @@ int wait(void) {
 //  - swtch to start running that process
 //  - eventually that process transfers control
 //      via swtch back to the scheduler.
+// * That's a good function to look at...
 void scheduler(void) {
   struct proc *p;
   int foundproc = 1;
@@ -275,13 +309,18 @@ void scheduler(void) {
       hlt();
 
     foundproc = 0;
-
+    // * determine the range
+    // * calculate the winner
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
+    // [x y z]
     for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
       if (p->state != RUNNABLE)
         continue;
-
+      // 1. increment the counter
+      // * keep searching for the next process to run until you find a winner
+      // 2. check if the counter exceeds the winning ticket value
+      // 3. if it does, execute that process
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
@@ -319,6 +358,7 @@ void sched(void) {
 }
 
 // Give up the CPU for one scheduling round.
+// This function is probably relevant
 void yield(void) {
   acquire(&ptable.lock); // DOC: yieldlock
   proc->state = RUNNABLE;

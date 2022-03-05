@@ -67,3 +67,10 @@ int sys_uptime(void) {
   release(&tickslock);
   return xticks;
 }
+
+
+int sys_wait_stat(void) {
+  int *ctime;
+  if (argptr(0, (void *)&ctime, sizeof(ctime)) < 0)
+    return wait_stat_proc(ctime, ttime, retime, rutime, stime);
+}
